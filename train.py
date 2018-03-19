@@ -37,7 +37,7 @@ def randomHueSaturationValue(image, hue_shift_limit=(-180, 180),
     return image
 
 
-def randomShiftScaleRotate(image, mask,mask_mean,
+def randomShiftScaleRotate(image, mask,
                            shift_limit=(-0.0625, 0.0625),
                            scale_limit=(-0.1, 0.1),
                            rotate_limit=(-45, 45), aspect_limit=(0, 0),
@@ -72,19 +72,14 @@ def randomShiftScaleRotate(image, mask,mask_mean,
                                    borderValue=(
                                        0, 0,
                                        0,))
-        mask_mean = cv2.warpPerspective(mask_mean, mat, (width, height), flags=cv2.INTER_LINEAR, borderMode=borderMode,
-                                   borderValue=(
-                                       0, 0,
-                                       0,))
-    return image, mask, mask_mean
+    return image, mask
 
 
-def randomHorizontalFlip(image, mask,mask_mean,u=0.5):
+def randomHorizontalFlip(image, mask,u=0.5):
     if np.random.random() < u:
         image = cv2.flip(image, 1)
         mask = cv2.flip(mask, 1)
-        mask_mean = cv2.flip(mask_mean, 1)
-    return image, mask, mask_mean
+    return image, mask
 
 def train_generator():
     while True:
@@ -95,27 +90,21 @@ def train_generator():
             ids_train_batch = ids_train_split[start:end]
             for id in ids_train_batch.values:
                 print('\nTraining Generating...'+id +'/'+str(len(ids_train_batch.values)))
-                mask_mean0 = cv2.imread('input/mask_mean_{}.jpg'.format(id[-2:]), cv2.IMREAD_GRAYSCALE)
-                mask_mean0 = cv2.resize(mask_mean0, (input_size, input_size))
-
                 img = cv2.imread('input/train/{}.jpg'.format(id))
                 img = cv2.resize(img, (input_size, input_size))
                 mask = cv2.imread('input/train_masks/{}_mask.png'.format(id), cv2.IMREAD_GRAYSCALE)
-
                 mask = cv2.resize(mask, (input_size, input_size))
-
                 img = randomHueSaturationValue(img,
                                                hue_shift_limit=(-50, 50),
                                                sat_shift_limit=(-5, 5),
                                                val_shift_limit=(-15, 15))
-                img, mask,mask_mean = randomShiftScaleRotate(img, mask,mask_mean0,
+                img, mask = randomShiftScaleRotate(img, mask,
                                                    shift_limit=(-0.0625, 0.0625),
                                                    scale_limit=(-0.1, 0.1),
                                                    rotate_limit=(-0, 0))
-                img, mask,mask_mean = randomHorizontalFlip(img, mask, mask_mean)
+                img, mask = randomHorizontalFlip(img, mask)
                 mask = np.expand_dims(mask, axis=2)
-                mask_mean = np.expand_dims(mask_mean, axis=2)
-                img = np.concatenate([img,mask_mean,img*mask_mean],axis = 2)
+                
                 x_batch.append(img)
                 y_batch.append(mask)
             x_batch = np.array(x_batch, np.float32) / 255
@@ -134,22 +123,9 @@ def valid_generator():
                 img = cv2.imread('input/train/{}.jpg'.format(id))
                 img = cv2.resize(img, (input_size, input_size))
                 mask = cv2.imread('input/train_masks/{}_mask.png'.format(id), cv2.IMREAD_GRAYSCALE)
-                mask_mean0 = cv2.imread('input/mask_mean_{}.jpg'.format(id[-2:]), cv2.IMREAD_GRAYSCALE)
-                mask_mean0 = cv2.resize(mask_mean0, (input_size, input_size))
 
                 mask = cv2.resize(mask, (input_size, input_size))
-                #img = randomHueSaturationValue(img,
-                #                              hue_shift_limit=(-50, 50),
-                #                              sat_shift_limit=(-5, 5),
-                #                               val_shift_limit=(-15, 15))
-                #img, mask, mask_mean = randomShiftScaleRotate(img, mask, mask_mean0,
-                #                                              shift_limit=(-0.0625, 0.0625),
-                #                                              scale_limit=(-0.1, 0.1),
-                #                                              rotate_limit=(-0, 0))
-                #img, mask, mask_mean = randomHorizontalFlip(img, mask, mask_mean)
-                mask_mean = np.expand_dims(mask_mean, axis=2)
                 mask = np.expand_dims(mask, axis=2)
-                img = np.concatenate([img, mask_mean, img * mask_mean],axis = 2)
                 x_batch.append(img)
                 y_batch.append(mask)
 
