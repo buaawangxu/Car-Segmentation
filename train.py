@@ -3,13 +3,12 @@ import numpy as np
 import pandas as pd
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, TensorBoard
 from sklearn.model_selection import train_test_split
-
 import params
 
 input_size = params.input_size
 epochs = params.max_epochs
 batch_size = params.batch_size
-model = params.model_factory()
+model = params.model_factory
 
 df_train = pd.read_csv('input/train_masks.csv')
 ids_train = df_train['img'].map(lambda s: s.split('.')[0])

@@ -1,5 +1,5 @@
 from model.u_net import get_unet_128, get_unet_256, get_unet_512, get_unet_1024,get_unet_1024_LeakyReLu,get_unet_1024_PReLU,get_unet_1024_PReLU_Hans
-
+from model.Models import get_unet_inception_res_sen_dense
 input_size = 1024
 
 max_epochs = 200
@@ -11,5 +11,6 @@ orig_height = 1280
 threshold = 0.5
 
 #model_factory = get_unet_1024_LeakyReLu
-model_factory = get_unet_1024_LeakyReLu
+model_factory = get_unet_inception_res_sen_dense(input_shape = (1024,1024,3), pool_size=(2, 2), n_calsses=1, depth=4, n_base_filters=32)
+
 #model_factory = get_unet_1024_PReLU
