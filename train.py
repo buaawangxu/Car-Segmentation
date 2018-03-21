@@ -10,7 +10,7 @@ epochs = params.max_epochs
 batch_size = params.batch_size
 model = params.model_factory
 
-df_train = pd.read_csv('input/train_masks.csv')
+df_train = pd.read_csv('E:/kaggle/input/train_masks.csv/train_masks.csv')
 ids_train = df_train['img'].map(lambda s: s.split('.')[0])
 
 ids_train_split, ids_valid_split = train_test_split(ids_train, test_size=0.2, random_state=42)

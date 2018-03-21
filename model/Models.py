@@ -31,20 +31,20 @@ def get_unet(input_shape, pool_size=(2, 2), n_calsses=1, depth=4, n_base_filters
 
     # add levels with max pooling
     for layer_depth in range(depth):
-        layer1 = Conv2D(filters=n_base_filters*(2**layer_depth), kernel_size =(3,3), dilation_rate=1 ,padding= 'same',activation= None)(current_layer)
+        layer1 = Conv2D(filters=n_base_filters*(2+layer_depth), kernel_size =(3,3), dilation_rate=1 ,padding= 'same',activation= None)(current_layer)
         layer1 = BatchNormalization()(layer1)
         layer1 = Activation(activation='relu')(layer1)
         #print(layer1.shape())
-        layer2= Conv2D(filters= n_base_filters*(2**layer_depth)*2, kernel_size =(3,3), dilation_rate=2 ,padding= 'same',activation= None)(layer1)
+        layer2= Conv2D(filters= n_base_filters*(2+layer_depth), kernel_size =(3,3), dilation_rate=2 ,padding= 'same',activation= None)(layer1)
         layer2 = BatchNormalization()(layer2)
         layer2 = Activation(activation='relu')(layer2)
         #print(layer2.output_shape)
 
-        layer3= Conv2D(filters= n_base_filters*(2**layer_depth)*4, kernel_size =(3,3), dilation_rate=4 ,padding= 'same',activation= None)(layer2)
+        layer3= Conv2D(filters= n_base_filters*(2+layer_depth), kernel_size =(3,3), dilation_rate=4 ,padding= 'same',activation= None)(layer2)
         layer3 = BatchNormalization()(layer3)
         layer3 = Activation(activation='relu')(layer3)
 
-        layer3= Conv2D(filters= n_base_filters*(2**layer_depth), kernel_size =(1,1), dilation_rate=1 ,padding= 'same',activation= None)(layer3)
+        layer3= Conv2D(filters= n_base_filters*(2+layer_depth), kernel_size =(1,1), dilation_rate=1 ,padding= 'same',activation= None)(layer3)
         #print(layer3.output_shape)
 
         # 两个卷积层
@@ -67,14 +67,14 @@ def get_unet(input_shape, pool_size=(2, 2), n_calsses=1, depth=4, n_base_filters
         concat = concatenate([up_convolution, levels[layer_depth][0]], axis=3)
         #print(concat.output_shape)
 
-        up_convolution = Conv2DTranspose(filters = current_layer._keras_shape[3]*2,dilation_rate= 2,
+        up_convolution = Conv2DTranspose(filters = current_layer._keras_shape[3],dilation_rate= 2,
                                          kernel_size = (2,2), strides=(1, 1), padding='same', activation=None)(concat)
         up_convolution = BatchNormalization()(up_convolution)
         up_convolution = Activation(activation= 'relu')(up_convolution)
         concat = concatenate([up_convolution, levels[layer_depth][1]], axis=3)
         #print(concat.output_shape)
 
-        up_convolution = Conv2DTranspose(filters=current_layer._keras_shape[3]*4, dilation_rate= 4,
+        up_convolution = Conv2DTranspose(filters=current_layer._keras_shape[3], dilation_rate= 4,
                                          kernel_size=(2, 2), strides=(1, 1),padding='same', activation=None)(concat)
         up_convolution = BatchNormalization()(up_convolution)
         up_convolution = Activation(activation='relu')(up_convolution)
@@ -112,6 +112,7 @@ def get_unet(input_shape, pool_size=(2, 2), n_calsses=1, depth=4, n_base_filters
     #print(current_layer.output_shape)
 
     model = Model(inputs = inputs,outputs= current_layer)
+    model.compile(optimizer=RMSprop(lr=0.0001), loss=bce_dice_loss, metrics=[dice_coeff])
     return model
 
 
