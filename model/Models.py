@@ -1,15 +1,13 @@
 import numpy as np
 import configparser
-from keras.optimizers import RMSprop
 from model.losses import bce_dice_loss, dice_loss, weighted_bce_dice_loss, weighted_dice_loss, dice_coeff,weighted_bce_dice_loss_hans
 
 from keras.models import Model
 from keras.layers import Input, merge, Conv2D, MaxPooling2D, AveragePooling2D, Dense,UpSampling2D, Reshape, core, Dropout,BatchNormalization,GlobalAveragePooling2D
-from keras.optimizers import Adam
+from keras.optimizers import Adam,RMSprop,SGD
 from keras.callbacks import ModelCheckpoint, LearningRateScheduler
 from keras import backend as K
 from keras.utils.vis_utils import plot_model
-from keras.optimizers import SGD
 import numpy as np
 from keras import backend as K
 from keras.engine import Input, Model
@@ -31,20 +29,20 @@ def get_unet(input_shape, pool_size=(2, 2), n_calsses=1, depth=4, n_base_filters
 
     # add levels with max pooling
     for layer_depth in range(depth):
-        layer1 = Conv2D(filters=n_base_filters*(2+layer_depth), kernel_size =(3,3), dilation_rate=1 ,padding= 'same',activation= None)(current_layer)
+        layer1 = Conv2D(filters=n_base_filters*(2**layer_depth), kernel_size =(2,2), dilation_rate=1 ,padding= 'same',activation= None)(current_layer)
         layer1 = BatchNormalization()(layer1)
         layer1 = Activation(activation='relu')(layer1)
         #print(layer1.shape())
-        layer2= Conv2D(filters= n_base_filters*(2+layer_depth), kernel_size =(3,3), dilation_rate=2 ,padding= 'same',activation= None)(layer1)
+        layer2= Conv2D(filters= n_base_filters*(2**layer_depth)*2, kernel_size =(2,2), dilation_rate=2 ,padding= 'same',activation= None)(layer1)
         layer2 = BatchNormalization()(layer2)
         layer2 = Activation(activation='relu')(layer2)
         #print(layer2.output_shape)
 
-        layer3= Conv2D(filters= n_base_filters*(2+layer_depth), kernel_size =(3,3), dilation_rate=4 ,padding= 'same',activation= None)(layer2)
+        layer3= Conv2D(filters= n_base_filters*(2**layer_depth)*4, kernel_size =(2,2), dilation_rate=4 ,padding= 'same',activation= None)(layer2)
         layer3 = BatchNormalization()(layer3)
         layer3 = Activation(activation='relu')(layer3)
 
-        layer3= Conv2D(filters= n_base_filters*(2+layer_depth), kernel_size =(1,1), dilation_rate=1 ,padding= 'same',activation= None)(layer3)
+        layer3= Conv2D(filters= n_base_filters*(2**layer_depth), kernel_size =(1,1), dilation_rate=1 ,padding= 'same',activation= None)(layer3)
         #print(layer3.output_shape)
 
         # 两个卷积层
@@ -58,36 +56,40 @@ def get_unet(input_shape, pool_size=(2, 2), n_calsses=1, depth=4, n_base_filters
 
     # add levels with up-convolution or up-sampling
     for layer_depth in range(depth-2, -1, -1):
-        current_layer = UpSampling2D(size=(2,2))(current_layer)
+        current_layer = Conv2DTranspose(filters = current_layer._keras_shape[3],
+                                        kernel_size = (2,2), strides=(2, 2), padding='same', activation=None)(current_layer)
 
         up_convolution = Conv2DTranspose(filters = current_layer._keras_shape[3],dilation_rate= 1 ,
                                         kernel_size = (2,2), strides=(1, 1), padding='same', activation=None)(current_layer)
         up_convolution = BatchNormalization()(up_convolution)
         up_convolution = Activation(activation= 'relu')(up_convolution)
-        concat = concatenate([up_convolution, levels[layer_depth][0]], axis=3)
+        concat = concatenate([up_convolution, levels[layer_depth][2]], axis=3)
         #print(concat.output_shape)
 
-        up_convolution = Conv2DTranspose(filters = current_layer._keras_shape[3],dilation_rate= 2,
+        up_convolution = Conv2DTranspose(filters = current_layer._keras_shape[3]*2,dilation_rate= 2,
                                          kernel_size = (2,2), strides=(1, 1), padding='same', activation=None)(concat)
         up_convolution = BatchNormalization()(up_convolution)
         up_convolution = Activation(activation= 'relu')(up_convolution)
         concat = concatenate([up_convolution, levels[layer_depth][1]], axis=3)
         #print(concat.output_shape)
 
-        up_convolution = Conv2DTranspose(filters=current_layer._keras_shape[3], dilation_rate= 4,
+        up_convolution = Conv2DTranspose(filters=current_layer._keras_shape[3]*4, dilation_rate= 4,
                                          kernel_size=(2, 2), strides=(1, 1),padding='same', activation=None)(concat)
         up_convolution = BatchNormalization()(up_convolution)
         up_convolution = Activation(activation='relu')(up_convolution)
-        concat = concatenate([up_convolution, levels[layer_depth][2]], axis=3)
+        concat = concatenate([up_convolution, levels[layer_depth][0]], axis=3)
         #print(concat.output_shape)
 
         current_layer = Conv2D(kernel_size=(1,1),filters= current_layer._keras_shape[3])(concat)
 
         #print(current_layer.output_shape)
 
-    current_layer = Conv2D(kernel_size=(1, 1), padding='same',activation = None,filters = current_layer._keras_shape[3])(current_layer)
-    current_layer = BatchNormalization()(current_layer)
-    current_layer = Activation(activation = 'relu')(current_layer)
+    current_layer = concatenate([current_layer,inputs],axis =3)
+    current_layer0 = Conv2D(kernel_size=(3, 3), padding='same',activation = None,filters = current_layer._keras_shape[3])(current_layer)
+    current_layer0 = BatchNormalization()(current_layer0)
+    current_layer0 = Activation(activation = 'relu')(current_layer0)
+    current_layer0 = concatenate([current_layer,current_layer0],axis =3)
+
     #print(current_layer.output_shape)
 
     #SEN = GlobalAveragePooling2D()(current_layer)
@@ -96,24 +98,153 @@ def get_unet(input_shape, pool_size=(2, 2), n_calsses=1, depth=4, n_base_filters
     #SEN = Activation(activation= 'relu')(SEN)
     #current_layer = Multiply()([SEN,current_layer])
 
-    current_layer = Conv2D(kernel_size=(2, 2), padding='same',activation = None,filters = n_base_filters)(current_layer)
-    current_layer = BatchNormalization()(current_layer)
-    current_layer = Activation(activation = 'relu')(current_layer)
+    current_layer1 = Conv2D(kernel_size=(2, 2), padding='same',activation = None,filters = n_base_filters)(current_layer0)
+    current_layer1 = BatchNormalization()(current_layer1)
+    current_layer1 = Activation(activation = 'relu')(current_layer1)
+    current_layer1 = concatenate([current_layer1,current_layer0],axis =3)
+
     #print(current_layer.output_shape)
 
-    current_layer = Conv2D(kernel_size=(3, 3), padding='same',activation = None,filters = n_base_filters)(current_layer)
-    current_layer = BatchNormalization()(current_layer)
-    current_layer = Activation(activation = 'relu')(current_layer)
+    current_layer2 = Conv2D(kernel_size=(1, 1), padding='same',activation = None,filters = n_base_filters)(current_layer1)
+    current_layer2 = BatchNormalization()(current_layer2)
+    current_layer2 = Activation(activation = 'relu')(current_layer2)
+    current_layer2 = concatenate([current_layer1,current_layer2],axis =3)
+
     #print(current_layer.output_shape)
 
-    current_layer = Conv2D(kernel_size=(1, 1), padding='same',activation = None,filters = n_calsses)(current_layer)
+    current_layer = Conv2D(kernel_size=(1, 1), padding='same',activation = None,filters = n_calsses)(current_layer2)
     current_layer = BatchNormalization()(current_layer)
     current_layer = Activation(activation = 'sigmoid')(current_layer)
     #print(current_layer.output_shape)
 
     model = Model(inputs = inputs,outputs= current_layer)
-    model.compile(optimizer=RMSprop(lr=0.0001), loss=bce_dice_loss, metrics=[dice_coeff])
     return model
+
+
+def get_unet_FPN(input_shape, pool_size=(2, 2), n_calsses=1, depth=4, n_base_filters=32):
+    inputs = Input(input_shape)
+
+    FPNS = []
+
+    levels = list()
+    current_layer = inputs
+    # add levels with max pooling
+    for layer_depth in range(depth):
+        layer1 = Conv2D(filters=n_base_filters*(1+layer_depth), kernel_size =(3,3), dilation_rate=1 ,padding= 'same',activation= None)(current_layer)
+        layer1 = BatchNormalization()(layer1)
+        layer1 = Activation(activation='relu')(layer1)
+        #print(layer1.shape())
+        layer2= Conv2D(filters= n_base_filters*(1+layer_depth), kernel_size =(2,2), dilation_rate=2 ,padding= 'same',activation= None)(layer1)
+        layer2 = BatchNormalization()(layer2)
+        layer2 = Activation(activation='relu')(layer2)
+        #print(layer2.output_shape)
+
+        layer3= Conv2D(filters= n_base_filters*(1+layer_depth), kernel_size =(1,1), dilation_rate=4 ,padding= 'same',activation= None)(layer2)
+        layer3 = BatchNormalization()(layer3)
+        layer3 = Activation(activation='relu')(layer3)
+
+        layer3= Conv2D(filters= n_base_filters*(1+layer_depth), kernel_size =(1,1), dilation_rate=1 ,padding= 'same',activation= None)(layer3)
+        #print(layer3.output_shape)
+
+        # 两个卷积层
+        if layer_depth < depth - 1:
+            current_layer = MaxPooling2D(pool_size=pool_size)(layer3)
+            #print(current_layer.output_shape)
+            levels.append([layer1, layer2, layer3, current_layer])
+        else:
+            current_layer = layer3
+            levels.append([layer1, layer2,layer3])
+
+    fpn = layer3
+    for temp in range(depth - 1):
+        fpn =   Conv2DTranspose(filters = current_layer._keras_shape[3],dilation_rate= 1 ,
+                                    kernel_size = (2,2), strides=(2,2), padding='same', activation=None)(fpn)
+
+    FPNS += [fpn]
+
+    # add levels with up-convolution or up-sampling
+    for layer_depth in range(depth-2, -1, -1):
+        current_layer = Conv2DTranspose(filters = n_base_filters*(1+layer_depth), dilation_rate= 1 ,
+                                    kernel_size = (2,2), strides=(2,2), padding='same', activation=None)(current_layer)
+
+        up_convolution = Conv2DTranspose(filters = current_layer._keras_shape[3],dilation_rate= 1 ,
+                                        kernel_size = (1,1), strides=(1, 1), padding='same', activation=None)(current_layer)
+        up_convolution = Activation(activation= 'relu')(up_convolution)
+        concat = concatenate([up_convolution, levels[layer_depth][2]], axis=3)
+        #print(concat.output_shape)
+
+        up_convolution = Conv2DTranspose(filters = n_base_filters*(1+layer_depth),dilation_rate= 2,
+                                         kernel_size = (2,2), strides=(1, 1), padding='same', activation=None)(concat)
+        up_convolution = Activation(activation= 'relu')(up_convolution)
+        concat = concatenate([up_convolution, levels[layer_depth][1]], axis=3)
+
+        #print(concat.output_shape)
+
+        up_convolution = Conv2DTranspose(filters=n_base_filters*(1+layer_depth), dilation_rate= 4,
+                                         kernel_size=(3, 3), strides=(1, 1),padding='same', activation=None)(concat)
+        up_convolution = Activation(activation='relu')(up_convolution)
+        concat = concatenate([up_convolution, levels[layer_depth][0]], axis=3)
+        
+        fpn = concat
+        for temp in range(layer_depth):
+            fpn =   Conv2DTranspose(filters = n_base_filters*(1+layer_depth),dilation_rate= 1 ,
+                                        kernel_size = (2,2), strides=(2,2), padding='same', activation=None)(fpn)
+        FPNS += [fpn]
+        #print(concat.output_shape)
+
+        current_layer = Conv2D(kernel_size=(1,1),filters= current_layer._keras_shape[3])(concat)
+
+        #print(current_layer.output_shape)
+
+    for depth_up in range(len(FPNS)-1):
+        feature_layer = FPNS[depth_up]
+        for temp in range(depth-1-depth_up):
+            feature_layer = Conv2DTranspose(filters = n_base_filters*(1+layer_depth), dilation_rate= 1 ,
+                                    kernel_size = (2,2), strides=(2,2), padding='same', activation=None)(feature_layer)
+        if depth_up != 0:
+            feature_layer = concatenate([current_layer, feature_layer], axis=3)
+            fpn = current_layer
+            for temp in range(depth-depth_up-1):
+                fpn =   MaxPooling2D(pool_size=pool_size)(fpn)
+            FPNS += [fpn]
+
+        feature_layer = Conv2D(filters=n_base_filters*(depth-depth_up), kernel_size =(3,3), dilation_rate=1 ,padding= 'same',activation= None)(feature_layer)
+        feature_layer = BatchNormalization()(feature_layer)
+        feature_layer = Activation(activation='relu')(feature_layer)
+
+        feature_layer = Conv2D(filters=n_base_filters*(depth-depth_up), kernel_size =(3,3), dilation_rate=1 ,padding= 'same',activation= None)(feature_layer)
+        feature_layer = BatchNormalization()(feature_layer)
+        feature_layer = Activation(activation='relu')(feature_layer)
+
+        current_layer = MaxPooling2D(pool_size=pool_size)(feature_layer)
+
+
+    FPNS += [current_layer,inputs]
+
+    current_layer0 = concatenate(FPNS,axis = 3)
+    current_layer1 = Conv2D(kernel_size=(3, 3), padding='same',activation = None,filters = 4*n_base_filters)(current_layer0)
+    current_layer1 = Activation(activation = 'relu')(current_layer1)
+    current_layer1 = concatenate([current_layer0,current_layer1],axis = 3)
+    #print(current_layer.output_shape)
+
+    current_layer2 = Conv2D(kernel_size=(2, 2), padding='same',activation = None,filters = 2*n_base_filters)(current_layer1)
+    current_layer2 = Activation(activation = 'relu')(current_layer2)
+    current_layer2 = concatenate([current_layer1,current_layer2],axis = 3)
+    #print(current_layer.output_shape)
+    current_layer3 = Conv2D(kernel_size=(1, 1), padding='same',activation = None,filters = n_base_filters)(current_layer2)
+    current_layer3 = Activation(activation = 'relu')(current_layer3)
+    current_layer3 = concatenate([current_layer2,current_layer3],axis = 3)
+
+    current_layer3 = Conv2D(kernel_size=(1, 1), padding='same',activation = None,filters = n_base_filters)(current_layer2)
+    current_layer3 = Activation(activation = 'relu')(current_layer3)
+
+    current_layer = Conv2D(kernel_size=(1, 1), padding='same',activation = None,filters = n_calsses)(current_layer3)
+    current_layer = Activation(activation = 'sigmoid')(current_layer)
+    #print(current_layer.output_shape)
+
+    model = Model(inputs = inputs,outputs= current_layer)
+    return model
+
 
 
 
@@ -802,15 +933,15 @@ def inception_res_sen_conv_block(current_layer):
     return out
 
 def get_unet_inception_res_sen_dense(input_shape, pool_size=(2, 2), n_calsses=1, depth=4, n_base_filters=32):
-    #inputs = Input(input_shape)
-    inputs = Input((None,None,3))
+    inputs = Input(input_shape)
+    #inputs = Input((None,None,3))
     current_layer = inputs
     levels = list()
 
     # add levels with max pooling
     for layer_depth in range(depth):
         current_layer = Conv2D(kernel_size=(1, 1), padding='same', activation='relu',
-                               filters=n_base_filters * (2 ** layer_depth))(current_layer)
+                               filters=n_base_filters * (1 + layer_depth))(current_layer)
 
         layer1 = inception_res_sen_conv_block(current_layer)
 
@@ -819,7 +950,7 @@ def get_unet_inception_res_sen_dense(input_shape, pool_size=(2, 2), n_calsses=1,
         layer1 = concatenate([current_layer, layer1], axis=3)
         layer1 = SEN_block(layer1)
         layer1 = Conv2D(kernel_size=(1, 1), padding='same', activation=None,
-                        filters=n_base_filters * (2 ** layer_depth))(layer1)
+                        filters=n_base_filters * (1 + layer_depth))(layer1)
 
         layer2 = inception_res_sen_conv_block(layer1)
 
@@ -829,19 +960,19 @@ def get_unet_inception_res_sen_dense(input_shape, pool_size=(2, 2), n_calsses=1,
         layer2 = concatenate([current_layer, layer1, layer2], axis=3)
         layer2 = SEN_block(layer2)
         layer2 = Conv2D(kernel_size=(1, 1), padding='same', activation=None,
-                        filters=n_base_filters * (2 ** layer_depth))(layer2)
+                        filters=n_base_filters * (1 + layer_depth))(layer2)
         # print(layer2.output_shape)
         layer2 = Add()([layer2, current_layer])
 
         layer3 = inception_res_sen_conv_block(layer2)
         layer3 = BatchNormalization()(layer3)
         layer3 = Activation(activation='relu')(layer3)
-        layer3 = Conv2D(filters=n_base_filters * (2 ** layer_depth), kernel_size=(1, 1), dilation_rate=1,
+        layer3 = Conv2D(filters=n_base_filters * (1 + layer_depth), kernel_size=(1, 1), dilation_rate=1,
                         padding='same', activation=None)(layer3)
         layer3 = concatenate([current_layer, layer1, layer2, layer3], axis=3)
         layer3 = SEN_block(layer3)
         layer3 = Conv2D(kernel_size=(1, 1), padding='same', activation=None,
-                        filters=n_base_filters * (2 ** layer_depth))(layer3)
+                        filters=n_base_filters * (1 + layer_depth))(layer3)
         layer3 = Add()([layer1, layer3])
 
         # 单一的残差块不能起作用,感觉我这种方式加入残差模块也不会起作用的样子
@@ -859,8 +990,8 @@ def get_unet_inception_res_sen_dense(input_shape, pool_size=(2, 2), n_calsses=1,
     # add levels with up-convolution or up-sampling
     for layer_depth in range(depth - 2, -1, -1):
         #current_layer = UpSampling2D(size=(2, 2))(current_layer)
-        current_layer = Conv2DTranspose(n_base_filters * (2 ** layer_depth),kernel_size=(2, 2),strides=(2,2))(current_layer)
-        current_layer = Conv2D(kernel_size=(1, 1), filters=n_base_filters * (2 ** layer_depth), activation='relu')(current_layer)
+        current_layer = Conv2DTranspose(n_base_filters * (1 + layer_depth),kernel_size=(2, 2),strides=(2,2))(current_layer)
+        current_layer = Conv2D(kernel_size=(1, 1), filters=n_base_filters * (1 + layer_depth), activation='relu')(current_layer)
 
         up_convolution = inception_res_sen_conv_block(current_layer)
         up_convolution = BatchNormalization()(up_convolution)
@@ -869,7 +1000,7 @@ def get_unet_inception_res_sen_dense(input_shape, pool_size=(2, 2), n_calsses=1,
         concat1 = concatenate([current_layer, concat1], axis=3)
         concat1 = SEN_block(concat1)
         concat1 = Conv2D(kernel_size=(1, 1), padding='same', activation=None,
-                         filters=n_base_filters * (2 ** layer_depth))(concat1)
+                         filters=n_base_filters * (1 + layer_depth))(concat1)
 
         # print(concat.output_shape)
 
@@ -931,7 +1062,7 @@ def get_unet_inception_res_sen_dense(input_shape, pool_size=(2, 2), n_calsses=1,
     current_layer = Activation(activation='sigmoid')(current_layer)
     # print(current_layer.output_shape)
     model = Model(inputs=inputs, outputs=current_layer)
-    model.compile(optimizer=RMSprop(lr=0.0001), loss=bce_dice_loss, metrics=[dice_coeff])
+    model.compile(optimizer=SGD(lr=0.001), loss=bce_dice_loss, metrics=[dice_coeff])
 
     return model
 
