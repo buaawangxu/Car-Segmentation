@@ -3,17 +3,17 @@ import numpy as np
 import pandas as pd
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, TensorBoard
 from sklearn.model_selection import train_test_split
-import params
-
+import post_params
 from keras.optimizers import RMSprop
 from model.losses import bce_dice_loss, dice_loss, weighted_bce_dice_loss, weighted_dice_loss, dice_coeff,weighted_bce_dice_loss_hans
-input_size = params.input_size
-epochs = params.max_epochs
-batch_size = params.batch_size
-model = params.model_factory
+input_size = post_params.input_size
+epochs = post_params.max_epochs
+batch_size = post_params.batch_size
 
+model = post_params.model_factory
 model.compile(optimizer=RMSprop(lr=0.0001), loss=bce_dice_loss, metrics=[dice_coeff])
 model.summary()
+
 df_train = pd.read_csv('input/train_masks.csv')
 ids_train = df_train['img'].map(lambda s: s.split('.')[0])
 
@@ -42,7 +42,7 @@ def randomHueSaturationValue(image, hue_shift_limit=(-180, 180),
     return image
 
 
-def randomShiftScaleRotate(image, mask,
+def randomShiftScaleRotate(image, mask,mask_pred,
                            shift_limit=(-0.0625, 0.0625),
                            scale_limit=(-0.1, 0.1),
                            rotate_limit=(-45, 45), aspect_limit=(0, 0),
@@ -77,14 +77,21 @@ def randomShiftScaleRotate(image, mask,
                                    borderValue=(
                                        0, 0,
                                        0,))
-    return image, mask
+        mask_pred = cv2.warpPerspective(mask_pred, mat, (width, height), flags=cv2.INTER_LINEAR, borderMode=borderMode,
+                           borderValue=(
+                               0, 0,
+                               0,))
+
+    return image, mask,mask_pred
 
 
-def randomHorizontalFlip(image, mask,u=0.5):
+def randomHorizontalFlip(image, mask,mask_pred,u=0.5):
     if np.random.random() < u:
         image = cv2.flip(image, 1)
         mask = cv2.flip(mask, 1)
-    return image, mask
+        mask_pred = cv2.flip(mask_pred, 1)
+
+    return image, mask,mask_pred
 
 def train_generator():
     while True:
@@ -100,17 +107,24 @@ def train_generator():
                 img = cv2.resize(img, (input_size, input_size))
                 mask = cv2.imread('input/train_masks/{}_mask.png'.format(id), cv2.IMREAD_GRAYSCALE)
                 mask = cv2.resize(mask, (input_size, input_size))
+                mask_pred = cv2.imread('input/train_masks_predict/{}_mask.png'.format(id), cv2.IMREAD_GRAYSCALE)
+                mask_pred = cv2.resize(mask_pred, (input_size, input_size))
+
+
                 img = randomHueSaturationValue(img,
                                                hue_shift_limit=(-50, 50),
                                                sat_shift_limit=(-5, 5),
                                                val_shift_limit=(-15, 15))
-                img, mask = randomShiftScaleRotate(img, mask,
+                img, mask,mask_pred = randomShiftScaleRotate(img, mask,mask_pred,
                                                    shift_limit=(-0.0625, 0.0625),
                                                    scale_limit=(-0.1, 0.1),
                                                    rotate_limit=(-0, 0))
-                img, mask = randomHorizontalFlip(img, mask)
+                img, mask ,mask_pred = randomHorizontalFlip(img, mask,mask_pred)
+
                 mask = np.expand_dims(mask, axis=2)
-                
+                mask_pred = np.expand_dims(mask_pred, axis=2)
+                img = np.concatenate([img,mask_pred],axis = 2)
+
                 x_batch.append(img)
                 y_batch.append(mask)
             x_batch = np.array(x_batch, np.float32) / 255
@@ -130,9 +144,14 @@ def valid_generator():
                 img = cv2.imread('input/train/{}.jpg'.format(id))
                 img = cv2.resize(img, (input_size, input_size))
                 mask = cv2.imread('input/train_masks/{}_mask.png'.format(id), cv2.IMREAD_GRAYSCALE)
-
                 mask = cv2.resize(mask, (input_size, input_size))
+                mask_pred = cv2.imread('input/train_masks_predict/{}_mask.png'.format(id), cv2.IMREAD_GRAYSCALE)
+                mask_pred = cv2.resize(mask_pred, (input_size, input_size))
+                
                 mask = np.expand_dims(mask, axis=2)
+                mask_pred = np.expand_dims(mask_pred, axis=2)
+                img = np.concatenate([img,mask_pred],axis = 2)
+                
                 x_batch.append(img)
                 y_batch.append(mask)
 
@@ -151,12 +170,12 @@ callbacks = [EarlyStopping(monitor='val_loss',
                                verbose=1,
                                epsilon=1e-4),
              ModelCheckpoint(monitor='val_loss',
-                             filepath='weights/best_weights.hdf5',
+                             filepath='weights/post_best_weights.hdf5',
                              save_best_only=True,
                              save_weights_only=True),
              TensorBoard(log_dir='logs')]
 try:
-    model.load_weights('weights/best_weights.hdf5')
+    model.load_weights('weights/post_best_weights.hdf5')
 except:
     pass
 model.fit_generator(generator=train_generator(),

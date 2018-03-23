@@ -81,6 +81,7 @@ def predictor(q, ):
         x_batch = q.get()
         with graph.as_default():
             preds = model.predict_on_batch(x_batch)
+            
         preds = np.squeeze(preds, axis=3)
         for pred in preds:
             prob = cv2.resize(pred, (orig_width, orig_height))
