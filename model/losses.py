@@ -21,7 +21,7 @@ def dice_coeff_np(y_true, y_pred):
     return score
 
 def dice_loss(y_true, y_pred):
-    loss = 1 - dice_coeff(y_true, y_pred)**4
+    loss = 1 - dice_coeff(y_true, y_pred)
     return loss
 
 

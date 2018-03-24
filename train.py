@@ -12,7 +12,7 @@ epochs = params.max_epochs
 batch_size = params.batch_size
 model = params.model_factory
 
-model.compile(optimizer=RMSprop(lr=0.00001), loss=bce_dice_loss, metrics=[dice_coeff])
+model.compile(optimizer=RMSprop(lr=0.0001), loss=bce_dice_loss, metrics=[dice_coeff])
 model.summary()
 df_train = pd.read_csv('input/train_masks.csv')
 ids_train = df_train['img'].map(lambda s: s.split('.')[0])
