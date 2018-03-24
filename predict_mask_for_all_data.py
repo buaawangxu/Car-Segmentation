@@ -13,31 +13,31 @@ import pydensecrf.densecrf as dense_crf
 from cv2 import imread
 import matplotlib.pyplot as plt
 from densecrf2 import crf_model, potentials
-from model.losses import dice_coeff
+from model.losses import dice_coeff_np
 # Create unary potential
-unary = potentials.UnaryPotentialFromProbabilities(gt_prob=0.7)
+unary = potentials.UnaryPotentialFromProbabilities(gt_prob=0.99)
 
 bilateral_pairwise = potentials.BilateralPotential(
-    sdims=40,
-    schan=13,
-    compatibility=4,
+    sdims=10,
+    schan=20,
+    compatibility=8,
     kernel=dense_crf.DIAG_KERNEL,
     normalization=dense_crf.NORMALIZE_SYMMETRIC
 )
 
 gaussian_pairwise = potentials.GaussianPotential(
-    sigma=3, 
-    compatibility=4,
+    sigma=10, 
+    compatibility=8,
     kernel=dense_crf.DIAG_KERNEL,
     normalization=dense_crf.NORMALIZE_SYMMETRIC
 )
 
 crf = crf_model.DenseCRF(
-    num_classes = 3,
-    zero_unsure = True,              # The number of output classes
+    num_classes = 2,
+    zero_unsure = False,              # The number of output classes
     unary_potential=unary,
     pairwise_potentials=[bilateral_pairwise, gaussian_pairwise],
-    use_2d = 'rgb-2d'                #'rgb-1d' or 'rgb-2d' or 'non-rgb'
+    use_2d = 'rgb-1d'                #'rgb-1d' or 'rgb-2d' or 'non-rgb'
 )
 
 
@@ -50,11 +50,11 @@ orig_height = params.orig_height
 threshold = params.threshold
 model = params.model_factory
 model.summary()
+model.load_weights(filepath='weights/best_weights.hdf5')
 
+'''
 df_test = pd.read_csv('input/train_masks.csv')
 ids_test = df_test['img'].map(lambda s: s.split('.')[0])
-
-model.load_weights(filepath='weights/best_weights.hdf5')
 
 for start in range(0, len(ids_test), batch_size):
     print('generating masks for training data....{:02d} % finished'.format(int(100*start/len(ids_test))))
@@ -76,9 +76,12 @@ for start in range(0, len(ids_test), batch_size):
         cv2.imwrite('input/train_masks_predict/'+ids_test_batch.values[i]+'_mask.png',mask*255)
 
         image = cv2.resize(255*x_batch[i,:,:,:],(orig_width, orig_height))
-        prob = np.expand_dims(prob)
-        prob = 255*np.concatenate([0*prob,prob,255-prob])
-        
+        prob = np.expand_dims(prob,axis = 2)
+        prob = 255*np.concatenate([0*prob,prob,255-prob],axis =2)
+        prob = prob.astype(np.uint8)
+        image = image.astype(np.uint8)
+        print(image.shape)
+        print(prob.shape)
         crf.set_image(
             image=image,
             probabilities=prob,
@@ -87,26 +90,51 @@ for start in range(0, len(ids_test), batch_size):
             label_source = 'label'           # where the label come from, 'softmax' or 'label'
         )
 
-        crf.perform_step_inference(25)
+        crf.perform_step_inference(3)
         mask_crf = crf.segmentation_map
+        print(np.min(mask_crf[:,:,0]),np.max(mask_crf[:,:,0]),np.median(mask_crf[:,:,0]))
+        print(np.min(mask_crf[:,:,1]),np.max(mask_crf[:,:,1]),np.median(mask_crf[:,:,1]))
+        print(np.min(mask_crf[:,:,2]),np.max(mask_crf[:,:,2]),np.median(mask_crf[:,:,2]))
+
+        #plt.imshow(mask_crf[:,:,0])
+        #plt.show()
+        #plt.imshow(mask_crf[:,:,1])
+        #plt.show()        
+        #plt.imshow(mask_crf[:,:,2])
+        #plt.show()
         
         cv2.imwrite('input/train_masks_predict/'+ids_test_batch.values[i]+'_mask_crf.png',mask_crf)
         mask_gt = cv2.imread('input/train_masks/{}_mask.png'.format(ids_test_batch.values[i]), cv2.IMREAD_GRAYSCALE)
-
-        dice_coef = dice_coeff(1.0*(mask_gt/255>0.5),1.0*(mask>0.5))
+        mask_gt = cv2.resize(mask_gt, (orig_width, orig_height))
+        if len(mask_gt.shape)>2:
+            mask_gt = mask_gt[:,:,0]
+        dice_coef = dice_coeff_np(1.0*(mask_gt/255>0.5),1.0*(mask>0.5))
         if len(mask_crf.shape)>2:
-            mask_crf = mask_crf[:,:,0]
-        dice_coef_crf = dice_coeff(1.0*(mask_gt/255>0.5),1.0*(mask_crf/255>0.5))
+            mask_crf = mask_crf[:,:,1]
+        dice_coef_crf = dice_coeff_np(1.0*(mask_gt/255>0.5),1.0*(mask_crf/255>0.5))
         print('the score with U-net is ',dice_coef)
         print('the score with U-net and CRF is ',dice_coef_crf)
 
 '''
+
+# https://www.kaggle.com/stainsby/fast-tested-rle
+def run_length_encode(mask):
+    inds = mask.flatten()
+    runs = np.where(inds[1:] != inds[:-1])[0] + 2
+    runs[1::2] = runs[1::2] - runs[:-1:2]
+    rle = ' '.join([str(r) for r in runs])
+    return rle
+
 df_test = pd.read_csv('input/sample_submission.csv')
 ids_test = df_test['img'].map(lambda s: s.split('.')[0])
+rles = []
 
+names = []
+for id in ids_test:
+    names.append('{}.jpg'.format(id))
 
 for start in range(0, len(ids_test), batch_size):
-    print('generating masks for training data....{:02d} % finished'.format(int(100*start/len(ids_test))))
+    print('generating masks for training data....{:02d}/{:02d}finished'.format(start,len(ids_test)))
     x_batch = []
     end = min(start + batch_size, len(ids_test))
     ids_test_batch = ids_test[start:end]
@@ -121,5 +149,11 @@ for start in range(0, len(ids_test), batch_size):
     for i,pred in enumerate(preds):
         prob = cv2.resize(pred, (orig_width, orig_height))
         mask = prob > threshold
-        cv2.imwrite('input/train_masks_predict/'+ids_test_batch.values[i]+'_mask.png',mask*255)
-        '''
+        cv2.imwrite('input/test_masks_predict/'+ids_test_batch.values[i]+'_mask.png',mask*255)
+        rle = run_length_encode(mask)
+        rles.append(rle)
+
+
+print("Generating submission file...")
+df = pd.DataFrame({'img': names, 'rle_mask': rles})
+df.to_csv('submit/submission_test_without_optimization_1.csv.gz', index=False, compression='gzip')

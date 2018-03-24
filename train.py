@@ -12,7 +12,7 @@ epochs = params.max_epochs
 batch_size = params.batch_size
 model = params.model_factory
 
-model.compile(optimizer=RMSprop(lr=0.0001), loss=bce_dice_loss, metrics=[dice_coeff])
+model.compile(optimizer=RMSprop(lr=0.00001), loss=bce_dice_loss, metrics=[dice_coeff])
 model.summary()
 df_train = pd.read_csv('input/train_masks.csv')
 ids_train = df_train['img'].map(lambda s: s.split('.')[0])
@@ -101,14 +101,14 @@ def train_generator():
                 mask = cv2.imread('input/train_masks/{}_mask.png'.format(id), cv2.IMREAD_GRAYSCALE)
                 mask = cv2.resize(mask, (input_size, input_size))
                 img = randomHueSaturationValue(img,
-                                               hue_shift_limit=(-50, 50),
-                                               sat_shift_limit=(-5, 5),
-                                               val_shift_limit=(-15, 15))
+                                               hue_shift_limit=(-0, 0),
+                                               sat_shift_limit=(-0, 0),
+                                               val_shift_limit=(-0, 0))
                 img, mask = randomShiftScaleRotate(img, mask,
-                                                   shift_limit=(-0.0625, 0.0625),
-                                                   scale_limit=(-0.1, 0.1),
+                                                   shift_limit=(-0.00625, 0.00625),
+                                                   scale_limit=(-0.01, 0.01),
                                                    rotate_limit=(-0, 0))
-                img, mask = randomHorizontalFlip(img, mask)
+                #img, mask = randomHorizontalFlip(img, mask)
                 mask = np.expand_dims(mask, axis=2)
                 
                 x_batch.append(img)
