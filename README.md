@@ -22,7 +22,7 @@ This is a project for the Kaggle competition "Carvana Image Masking Challenge". 
 ## 4. Summary of useful ideas     
 > (1) Use Diation Convolution in the middle layer.    
 > (2) Ensemble results of different argumentation pictures    
-> (3) Use another U-net to train along the edges of the predictions of U-net using small pathes of the original image. The ultimate implementation of this idea is to combine these two U-net into one model and train a end-to-end model.    
+> (3) Use another U-net to train along the edges of the predictions of U-net using small pathes of the original image. The ultimate implementation of this idea is to combine these two U-net into one model and train an end-to-end model (share the features like fast rcnn).    
 
 ## 5. To do list    
 > (1) Use Diation Convolution in the middle layer.    
@@ -32,7 +32,7 @@ This is a project for the Kaggle competition "Carvana Image Masking Challenge". 
 > (2) Use another U-net to train along the edges of the predictions of U-net using small pathes
 
 >          -without the prediction patches   CV 0.9765  no improvement on original image    
->          -with the prediction patches   CV 0.9865
+>          -with the prediction patches      CV 0.9865
 
 
 
