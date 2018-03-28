@@ -19,7 +19,7 @@ This is a project for the Kaggle competition "Carvana Image Masking Challenge". 
 
 #Stage Two: Ensenble Useful Ideas
 
-## 4. Useful Ideas Summary    
+## 4. Summary of useful ideas     
 > (1) Use Diation Convolution in the middle layer.    
 > (2) Ensemble results of different argumentation pictures    
 > (3) Use another U-net to train along the edges of the predictions of U-net using small pathes of the original image. The ultimate implementation of this idea is to combine these two U-net into one model and train a end-to-end model.    
