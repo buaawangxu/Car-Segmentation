@@ -31,7 +31,7 @@ This is a project for the Kaggle competition "Carvana Image Masking Challenge". 
 
 > (2) Use another U-net to train along the edges of the predictions of U-net using small pathes
 
->          -without the prediction patches   CV 0.9765/0.9788  no improvement on original image    
+>          -without the prediction patches   CV 0.9765/0.9788  no improvement on original image      
 >          -with the prediction patches      CV 0.9888/0.9909  0.001 improvement seen on training data
 
 
